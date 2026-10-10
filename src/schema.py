@@ -8,6 +8,26 @@ SALES_COL = "sales"
 
 REQUIRED_COLUMNS = [DATE_COL, STORE_COL, ITEM_COL, SALES_COL]
 
+# Forecast output / validation errors (used by inventory)
+Y_HAT_COL = "y_hat"
+MODEL_COL = "model"
+ERROR_COL = "error"  # daily forecast error (actual - y_hat), validation window
+
+# Simulated inventory table
+LEAD_TIME_COL = "lead_time_days"
+UNIT_COST_COL = "unit_cost"
+ORDER_COST_COL = "order_cost"
+HOLDING_RATE_COL = "holding_cost_rate"
+STOCK_ON_HAND_COL = "stock_on_hand"
+
+# Inventory plan output
+SAFETY_STOCK_COL = "safety_stock"
+REORDER_POINT_COL = "reorder_point"
+EOQ_COL = "eoq"
+FLAG_COL = "flag"
+ORDER_QTY_COL = "order_qty"
+
+
 def validate_schema(df: pd.DataFrame) -> None:
     """Validates dataframe schema and data types."""
     # Check required columns
