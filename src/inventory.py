@@ -51,6 +51,12 @@ def _require(name: str, value: float, positive: bool = False) -> None:
         raise ValueError(f"{name} must be {'> 0' if positive else '>= 0'}, got {value}")
 
 
+def _check_columns(name: str, df: pd.DataFrame, cols: list) -> None:
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"{name} is missing columns: {missing}")
+
+
 def z_score(service_level: float = DEFAULT_SERVICE_LEVEL) -> float:
     """Normal z-value for a cycle service level, e.g. 0.95 -> ~1.645."""
     if not 0 < service_level < 1:
@@ -107,7 +113,12 @@ def stock_flag(
     _require("stock_on_hand", stock_on_hand)
     _require("reorder_point_units", reorder_point_units)
     _require("eoq_units", eoq_units)
-    if stock_on_hand <= reorder_point_units:
+    # stockout_risk only if an order would actually be placed (qty > 0);
+    # with zero demand ROP = EOQ = 0, so stock 0 is ok, not a risk.
+    if (
+        stock_on_hand <= reorder_point_units
+        and max_stock_level(reorder_point_units, eoq_units) > stock_on_hand
+    ):
         return STOCKOUT_RISK
     if stock_on_hand > max_stock_level(reorder_point_units, eoq_units):
         return OVERSTOCK
@@ -169,9 +180,28 @@ def build_inventory_plan(
 
     sigma_daily = std of errors per series. Series with < 2 error points get
     NaN std; those are filled with the median sigma of the other series.
+    
+    NOTE: std measures spread around the mean error, so a biased forecast
+    looks safer than it is (RMSE would be more conservative). We follow the
+    standard formula; revisit if the chosen model is clearly biased.
+
+    If `errors` has a `model` column, only rows matching the forecast's
+    model are used.
     """
+    _check_columns("forecast", forecast, _KEYS + [Y_HAT_COL, MODEL_COL])
+    _check_columns("errors", errors, _KEYS + [ERROR_COL])
+    _check_columns(
+        "inventory",
+        inventory,
+        _KEYS + [LEAD_TIME_COL, UNIT_COST_COL, ORDER_COST_COL,
+                 HOLDING_RATE_COL, STOCK_ON_HAND_COL],
+    )
+    if forecast.empty:
+        raise ValueError("forecast is empty")
     if forecast[MODEL_COL].nunique() > 1:
         raise ValueError("forecast must contain a single model; filter first")
+    if MODEL_COL in errors.columns:
+        errors = errors[errors[MODEL_COL] == forecast[MODEL_COL].iloc[0]]
 
     demand = (
         forecast.assign(**{Y_HAT_COL: forecast[Y_HAT_COL].clip(lower=0)})

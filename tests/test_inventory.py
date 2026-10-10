@@ -230,3 +230,38 @@ def test_plan_rejects_missing_forecast():
     forecast = forecast[forecast[ITEM_COL] == 1]
     with pytest.raises(ValueError):
         build_inventory_plan(forecast, errors, inventory)
+
+
+def test_plan_uses_only_errors_of_forecast_model():
+    forecast, _, inventory = _plan_inputs()  # forecast model = "naive"
+    errors = pd.DataFrame(
+        [(1, i, e, m) for i in (1, 2)
+         for m, es in (("naive", (5.0, -5.0)), ("ma_7", (100.0, -100.0)))
+         for e in es],
+        columns=[STORE_COL, ITEM_COL, ERROR_COL, MODEL_COL],
+    )
+    plan = build_inventory_plan(forecast, errors, inventory)
+    expected = safety_stock(np.std([5.0, -5.0], ddof=1), 4)
+    assert plan[SAFETY_STOCK_COL].tolist() == pytest.approx([expected, expected])
+
+
+def test_plan_errors_for_other_model_only_raises():
+    forecast, _, inventory = _plan_inputs()
+    errors = pd.DataFrame(
+        [(1, i, e, "ma_7") for i in (1, 2) for e in (5.0, -5.0)],
+        columns=[STORE_COL, ITEM_COL, ERROR_COL, MODEL_COL],
+    )
+    with pytest.raises(ValueError):
+        build_inventory_plan(forecast, errors, inventory)
+
+
+def test_plan_missing_column_gives_clear_error():
+    forecast, errors, inventory = _plan_inputs()
+    with pytest.raises(ValueError, match="missing columns"):
+        build_inventory_plan(forecast.drop(columns=[Y_HAT_COL]), errors, inventory)
+
+
+def test_zero_demand_flag_and_order_agree():
+    assert stock_flag(0, 0, 0) == OK
+    assert recommended_order_qty(0, 0, 0) == 0
+    assert stock_flag(5, 0, 0) == OVERSTOCK
