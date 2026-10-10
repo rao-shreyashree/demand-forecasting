@@ -1,37 +1,38 @@
 import pandas as pd
-from src.schema import DATE, STORE, ITEM, SALES, validate_dataframe
+from src.schema import DATE_COL, STORE_COL, ITEM_COL, SALES_COL, validate_schema
 
 def load_data(filepath: str) -> pd.DataFrame:
-    """Loads raw CSV data and parses dates."""
-    df = pd.read_csv(filepath)
-    df[DATE] = pd.to_datetime(df[DATE])
-    return df
+    """Loads raw CSV data."""
+    return pd.read_csv(filepath)
 
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Cleans data: sorts chronologically, fills missing sales, and validates schema."""
+    """Cleans dataframe, handles data types, drops invalid sales rows, and sorts."""
     df = df.copy()
     
-    # Ensure correct data types
-    df[DATE] = pd.to_datetime(df[DATE])
-    df[SALES] = pd.to_numeric(df[SALES], errors='coerce').fillna(0)
+    # Convert date to datetime
+    df[DATE_COL] = pd.to_datetime(df[DATE_COL])
     
-    # Sort chronologically by store, item, date
-    df = df.sort_values(by=[STORE, ITEM, DATE]).reset_index(drop=True)
+    # Ensure store and item are integer types
+    df[STORE_COL] = df[STORE_COL].astype(int)
+    df[ITEM_COL] = df[ITEM_COL].astype(int)
     
-    # Validate against schema contract
-    validate_dataframe(df)
+    # Coerce sales to numeric and drop invalid/missing rows (do NOT fillna with 0)
+    df[SALES_COL] = pd.to_numeric(df[SALES_COL], errors="coerce")
+    df = df.dropna(subset=[SALES_COL])
     
+    # Validate schema contract
+    validate_schema(df)
+    
+    # Sort explicitly by (store, item, date)
+    df = df.sort_values(by=[STORE_COL, ITEM_COL, DATE_COL]).reset_index(drop=True)
     return df
 
-def time_split(df: pd.DataFrame, horizon: int = 28):
-    """
-    Splits dataframe temporally into train and validation sets, 
-    reserving the last 'horizon' days for validation without shuffling.
-    """
-    df = df.sort_values(DATE)
-    cutoff_date = df[DATE].max() - pd.Timedelta(days=horizon)
+def time_split(df: pd.DataFrame, horizon: int = 28) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Splits dataframe into train and validation sets preserving (store, item, date) order."""
+    max_date = df[DATE_COL].max()
+    cutoff_date = max_date - pd.Timedelta(days=horizon)
     
-    train_df = df[df[DATE] <= cutoff_date].copy()
-    val_df = df[df[DATE] > cutoff_date].copy()
+    train = df[df[DATE_COL] <= cutoff_date].sort_values(by=[STORE_COL, ITEM_COL, DATE_COL]).reset_index(drop=True)
+    val = df[df[DATE_COL] > cutoff_date].sort_values(by=[STORE_COL, ITEM_COL, DATE_COL]).reset_index(drop=True)
     
-    return train_df, val_df
+    return train, val

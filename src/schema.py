@@ -1,26 +1,26 @@
 import pandas as pd
 
-# Column Name Constants
-DATE = "date"
-STORE = "store"
-ITEM = "item"
-SALES = "sales"
-Y_HAT = "y_hat"
-MODEL = "model"
+# Schema Constants
+DATE_COL = "date"
+STORE_COL = "store"
+ITEM_COL = "item"
+SALES_COL = "sales"
 
-REQUIRED_COLUMNS = [DATE, STORE, ITEM, SALES]
+REQUIRED_COLUMNS = [DATE_COL, STORE_COL, ITEM_COL, SALES_COL]
 
-def validate_dataframe(df: pd.DataFrame) -> bool:
-    """
-    Validates that the dataframe contains all required columns 
-    and proper data types. Raises ValueError if validation fails.
-    """
-    for col in REQUIRED_COLUMNS:
-        if col not in df.columns:
-            raise ValueError(f"Missing required column: {col}")
-            
-    # Ensure date is datetime type
-    if not pd.api.types.is_datetime64_any_dtype(df[DATE]):
-        raise TypeError(f"Column '{DATE}' must be of datetime type.")
+def validate_schema(df: pd.DataFrame) -> None:
+    """Validates dataframe schema and data types."""
+    # Check required columns
+    missing_cols = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
+    
+    # Check date type
+    if not pd.api.types.is_datetime64_any_dtype(df[DATE_COL]):
+        raise TypeError(f"Column '{DATE_COL}' must be datetime type.")
         
-    return True
+    # Check store and item integer types
+    if not pd.api.types.is_integer_dtype(df[STORE_COL]):
+        raise TypeError(f"Column '{STORE_COL}' must be integer type.")
+    if not pd.api.types.is_integer_dtype(df[ITEM_COL]):
+        raise TypeError(f"Column '{ITEM_COL}' must be integer type.")

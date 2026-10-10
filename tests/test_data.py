@@ -1,38 +1,38 @@
-import pytest
 import pandas as pd
-from datetime import datetime, timedelta
-from src.schema import DATE, STORE, ITEM, SALES, validate_dataframe
-from src.data import time_split, clean_data
+import pytest
+from src.schema import DATE_COL, STORE_COL, ITEM_COL, SALES_COL
+from src.data import clean_data, time_split
 
 @pytest.fixture
-def sample_data():
-    # Create 40 days of dummy data for testing time_split and cleaning
-    base_date = datetime(2026, 1, 1)
-    dates = [base_date + timedelta(days=i) for i in range(40)]
-    
-    data = {
-        DATE: dates * 2,
-        STORE: [1] * 40 + [2] * 40,
-        ITEM: [101] * 40 + [102] * 40,
-        SALES: [10] * 80
-    }
+def sample_raw_data():
+    dates = pd.date_range("2023-01-01", periods=60, freq="D")
+    data = []
+    for store in [1, 2]:
+        for item in [1, 2]:
+            for d in dates:
+                data.append({DATE_COL: d, STORE_COL: store, ITEM_COL: item, SALES_COL: 10})
+    # Add a malformed row
+    data.append({DATE_COL: "2023-01-01", STORE_COL: 1, ITEM_COL: 1, SALES_COL: "invalid"})
     return pd.DataFrame(data)
 
-def test_time_split(sample_data):
-    horizon = 28
-    train_df, val_df = time_split(sample_data, horizon=horizon)
+def test_clean_data_drops_invalid_sales_and_sorts(sample_raw_data):
+    cleaned = clean_data(sample_raw_data)
     
-    # Check that validation set has exactly the horizon span of unique days max or correct row partitions
-    assert not train_df.empty
-    assert not val_df.empty
-    # Ensure no data leakage (train dates are strictly before val dates)
-    assert train_df[DATE].max() < val_df[DATE].min()
+    # Ensure invalid sales row was removed rather than zero-filled
+    assert len(cleaned) == 240
+    assert cleaned[SALES_COL].isnull().sum() == 0
+    
+    # Ensure sorting order (store, item, date)
+    is_sorted = (cleaned == cleaned.sort_values(by=[STORE_COL, ITEM_COL, DATE_COL])).all().all()
+    assert is_sorted
 
-def test_validate_dataframe(sample_data):
-    # Should pass successfully
-    assert validate_dataframe(sample_data) == True
+def test_time_split_28_day_horizon_and_no_leakage(sample_raw_data):
+    cleaned = clean_data(sample_raw_data)
+    train, val = time_split(cleaned, horizon=28)
     
-    # Should fail if column is missing
-    bad_df = sample_data.drop(columns=[SALES])
-    with pytest.raises(ValueError):
-        validate_dataframe(bad_df)
+    # Check 28-day validation period
+    val_days = (val[DATE_COL].max() - val[DATE_COL].min()).days + 1
+    assert val_days == 28
+    
+    # Check no data leakage between train and val
+    assert train[DATE_COL].max() < val[DATE_COL].min()
