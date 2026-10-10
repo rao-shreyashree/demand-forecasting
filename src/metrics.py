@@ -4,8 +4,10 @@ WAPE is the primary metric for this project. MAPE is reported only as a
 secondary metric because it is undefined when actual sales are zero
 (common with intermittent demand).
 
-Sign convention: error = actual - forecast, so a positive error means the
-forecast was too low (under-forecast -> stockout risk).
+Sign conventions (do not mix them up):
+  * forecast_errors(): error = actual - forecast  (positive = under-forecast)
+  * bias():            mean(forecast - actual)    (positive = over-forecast)
+  so mean(error column) == -bias() for the same data.
 """
 import numpy as np
 import pandas as pd
@@ -13,7 +15,10 @@ import pandas as pd
 from src.schema import DATE_COL as DATE, STORE_COL as STORE
 from src.schema import ITEM_COL as ITEM, SALES_COL as SALES
 
-Y_HAT = "y_hat"  # not defined in schema.py yet
+# TODO: swap for imports once schema.py defines Y_HAT_COL, MODEL_COL, ERROR_COL
+Y_HAT = "y_hat"
+MODEL = "model"
+ERROR = "error"
 
 
 def _prepare(y_true, y_pred):
@@ -69,19 +74,25 @@ def bias(y_true, y_pred):
 
     Positive = over-forecasting (overstock risk),
     negative = under-forecasting (stockout risk).
+    NOTE: opposite sign to the `error` column of forecast_errors()
+    (which is actual - forecast).
     """
     yt, yp = _prepare(y_true, y_pred)
     return float(np.mean(yp - yt))
 
 
-def forecast_errors(actual_df, forecast_df):
+def forecast_errors(actual_df, forecast_df, strict=True):
     """Per-row forecast errors (actual - forecast) for the inventory module.
 
-    actual_df   : columns date, store, item, sales
-    forecast_df : columns date, store, item, y_hat (extra columns allowed)
+    actual_df   : columns date, store, item, sales (one row per key)
+    forecast_df : columns date, store, item, y_hat, optionally model
+    strict      : if True, raise when some forecast rows have no matching
+                  actual (a partial validation window would skew sigma).
 
-    Returns a DataFrame with columns date, store, item, error. Only rows
-    present in both inputs are kept (inner join). Raises if nothing matches.
+    Returns a DataFrame with columns date, store, item, [model,] error.
+    If forecast_df has a `model` column it is kept, so callers can filter or
+    group by model. Without a `model` column, duplicate (date, store, item)
+    keys in forecast_df raise instead of silently duplicating rows.
     """
     keys = [DATE, STORE, ITEM]
     for name, df, cols in (
@@ -92,10 +103,29 @@ def forecast_errors(actual_df, forecast_df):
         if missing:
             raise ValueError(f"{name} is missing columns: {missing}")
 
+    has_model = MODEL in forecast_df.columns
+    fc_keys = keys + ([MODEL] if has_model else [])
+    if actual_df.duplicated(keys).any():
+        raise ValueError("actual_df has duplicate (date, store, item) rows")
+    if forecast_df.duplicated(fc_keys).any():
+        raise ValueError(
+            "forecast_df has duplicate (date, store, item) rows; "
+            "filter to one model or include a 'model' column"
+        )
+
+    fc_cols = fc_keys + [Y_HAT]
     merged = actual_df[keys + [SALES]].merge(
-        forecast_df[keys + [Y_HAT]], on=keys, how="inner"
+        forecast_df[fc_cols],
+        on=keys,
+        how="inner",
+        validate="one_to_many" if has_model else "one_to_one",
     )
     if merged.empty:
         raise ValueError("No matching (date, store, item) rows to compare")
-    merged["error"] = merged[SALES] - merged[Y_HAT]
-    return merged[keys + ["error"]].reset_index(drop=True)
+    if strict and len(merged) < len(forecast_df):
+        raise ValueError(
+            f"Only {len(merged)} of {len(forecast_df)} forecast rows have an "
+            "actual value; the validation window is incomplete"
+        )
+    merged[ERROR] = merged[SALES] - merged[Y_HAT]
+    return merged[fc_keys + [ERROR]].reset_index(drop=True)
