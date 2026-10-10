@@ -1,13 +1,54 @@
-"""Inventory policy math: safety stock, reorder point, EOQ, stock flags.
+"""Inventory policy: safety stock, reorder point, EOQ, stock flags,
+simulated inventory, and a DataFrame wrapper that builds the plan.
+
+Rules (single source of truth, flag and order agree):
+    stock <= ROP          -> stockout_risk, order up to ROP + EOQ
+    stock >  ROP + EOQ    -> overstock
+    otherwise             -> ok
 """
-from math import ceil, sqrt
+from math import ceil, isfinite, sqrt
 from statistics import NormalDist
 
+import numpy as np
+import pandas as pd
+
+from src.schema import (
+    EOQ_COL,
+    ERROR_COL,
+    FLAG_COL,
+    HOLDING_RATE_COL,
+    ITEM_COL,
+    LEAD_TIME_COL,
+    MODEL_COL,
+    ORDER_COST_COL,
+    ORDER_QTY_COL,
+    REORDER_POINT_COL,
+    SAFETY_STOCK_COL,
+    SALES_COL,
+    STOCK_ON_HAND_COL,
+    STORE_COL,
+    UNIT_COST_COL,
+    Y_HAT_COL,
+    validate_schema,
+)
+
 DEFAULT_SERVICE_LEVEL = 0.95
+RANDOM_SEED = 42
+DAYS_PER_YEAR = 365
 
 STOCKOUT_RISK = "stockout_risk"
 OK = "ok"
 OVERSTOCK = "overstock"
+
+_KEYS = [STORE_COL, ITEM_COL]
+
+
+def _require(name: str, value: float, positive: bool = False) -> None:
+    """Reject NaN/inf/negative (and zero if positive=True)."""
+    if not isfinite(value):
+        raise ValueError(f"{name} must be finite, got {value}")
+    if value < 0 or (positive and value == 0):
+        raise ValueError(f"{name} must be {'> 0' if positive else '>= 0'}, got {value}")
 
 
 def z_score(service_level: float = DEFAULT_SERVICE_LEVEL) -> float:
@@ -22,12 +63,9 @@ def safety_stock(
     lead_time_days: float,
     service_level: float = DEFAULT_SERVICE_LEVEL,
 ) -> float:
-    """z * sigma_daily * sqrt(lead_time).
-
-    sigma_daily = std of daily forecast error (from validation errors).
-    """
-    if sigma_daily < 0 or lead_time_days < 0:
-        raise ValueError("sigma_daily and lead_time_days must be >= 0")
+    """z * sigma_daily * sqrt(lead_time). sigma_daily = std of daily forecast error."""
+    _require("sigma_daily", sigma_daily)
+    _require("lead_time_days", lead_time_days)
     return z_score(service_level) * sigma_daily * sqrt(lead_time_days)
 
 
@@ -35,8 +73,9 @@ def reorder_point(
     mean_daily_demand: float, lead_time_days: float, safety_stock_units: float
 ) -> float:
     """Expected demand during lead time + safety stock."""
-    if mean_daily_demand < 0 or lead_time_days < 0 or safety_stock_units < 0:
-        raise ValueError("inputs must be >= 0")
+    _require("mean_daily_demand", mean_daily_demand)
+    _require("lead_time_days", lead_time_days)
+    _require("safety_stock_units", safety_stock_units)
     return mean_daily_demand * lead_time_days + safety_stock_units
 
 
@@ -46,9 +85,11 @@ def eoq(
     unit_cost: float,
     holding_cost_rate: float,
 ) -> float:
-    """Economic order quantity: sqrt(2 * D * S / H), H = unit_cost * holding_cost_rate."""
-    if annual_demand < 0 or order_cost < 0:
-        raise ValueError("annual_demand and order_cost must be >= 0")
+    """sqrt(2 * D * S / H), H = unit_cost * holding_cost_rate."""
+    _require("annual_demand", annual_demand)
+    _require("order_cost", order_cost)
+    _require("unit_cost", unit_cost)
+    _require("holding_cost_rate", holding_cost_rate)
     holding_cost = unit_cost * holding_cost_rate
     if holding_cost <= 0:
         raise ValueError("unit_cost * holding_cost_rate must be > 0")
@@ -56,20 +97,17 @@ def eoq(
 
 
 def max_stock_level(reorder_point_units: float, eoq_units: float) -> float:
-    """Upper bound of healthy stock: right after a reorder lands on top of ROP."""
+    """Order-up-to level: ROP + EOQ."""
     return reorder_point_units + eoq_units
 
 
 def stock_flag(
     stock_on_hand: float, reorder_point_units: float, eoq_units: float
 ) -> str:
-    """Classify current stock.
-
-    stock_on_hand <  ROP            -> stockout_risk
-    stock_on_hand >  ROP + EOQ      -> overstock
-    otherwise                       -> ok
-    """
-    if stock_on_hand < reorder_point_units:
+    _require("stock_on_hand", stock_on_hand)
+    _require("reorder_point_units", reorder_point_units)
+    _require("eoq_units", eoq_units)
+    if stock_on_hand <= reorder_point_units:
         return STOCKOUT_RISK
     if stock_on_hand > max_stock_level(reorder_point_units, eoq_units):
         return OVERSTOCK
@@ -79,7 +117,99 @@ def stock_flag(
 def recommended_order_qty(
     stock_on_hand: float, reorder_point_units: float, eoq_units: float
 ) -> int:
-    """Order one EOQ (rounded up) if at/below ROP, else 0."""
+    """If stock <= ROP, order up to ROP + EOQ (>= one EOQ). Else 0."""
+    _require("stock_on_hand", stock_on_hand)
+    _require("reorder_point_units", reorder_point_units)
+    _require("eoq_units", eoq_units)
     if stock_on_hand <= reorder_point_units:
-        return int(ceil(eoq_units))
+        return int(ceil(max_stock_level(reorder_point_units, eoq_units) - stock_on_hand))
     return 0
+
+
+def simulate_inventory(df: pd.DataFrame, seed: int = RANDOM_SEED) -> pd.DataFrame:
+    """Simulated inventory per (store, item). Deterministic for a given seed.
+
+    Input: cleaned sales df (validated against schema).
+    Output cols: store, item, lead_time_days, unit_cost, order_cost,
+                 holding_cost_rate, stock_on_hand  (sorted by store, item)
+
+    Assumptions:
+      lead_time_days     ~ int uniform [2, 14]
+      unit_cost          ~ uniform [5, 50], 2 dp
+      order_cost         ~ uniform [20, 100], 2 dp
+      holding_cost_rate  ~ uniform [0.15, 0.30], 3 dp (fraction of unit_cost / year)
+      stock_on_hand      = mean daily sales * days of cover, cover ~ uniform [2, 30]
+    """
+    validate_schema(df)
+    rng = np.random.default_rng(seed)
+    mean_daily = df.groupby(_KEYS)[SALES_COL].mean().sort_index()
+    n = len(mean_daily)
+
+    out = mean_daily.index.to_frame(index=False)
+    out[LEAD_TIME_COL] = rng.integers(2, 15, n)
+    out[UNIT_COST_COL] = rng.uniform(5, 50, n).round(2)
+    out[ORDER_COST_COL] = rng.uniform(20, 100, n).round(2)
+    out[HOLDING_RATE_COL] = rng.uniform(0.15, 0.30, n).round(3)
+    cover_days = rng.uniform(2, 30, n)
+    out[STOCK_ON_HAND_COL] = np.round(mean_daily.to_numpy() * cover_days).astype(int)
+    return out
+
+
+def build_inventory_plan(
+    forecast: pd.DataFrame,
+    errors: pd.DataFrame,
+    inventory: pd.DataFrame,
+    service_level: float = DEFAULT_SERVICE_LEVEL,
+) -> pd.DataFrame:
+    """Combine forecast + validation errors + simulated inventory into a plan.
+
+    forecast : date, store, item, y_hat, model  (ONE model only)
+    errors   : store, item, error  (daily forecast error on validation window)
+    inventory: output of simulate_inventory()
+
+    sigma_daily = std of errors per series. Series with < 2 error points get
+    NaN std; those are filled with the median sigma of the other series.
+    """
+    if forecast[MODEL_COL].nunique() > 1:
+        raise ValueError("forecast must contain a single model; filter first")
+
+    demand = (
+        forecast.assign(**{Y_HAT_COL: forecast[Y_HAT_COL].clip(lower=0)})
+        .groupby(_KEYS)[Y_HAT_COL]
+        .mean()
+        .rename("mean_daily_demand")
+        .reset_index()
+    )
+    sigma = errors.groupby(_KEYS)[ERROR_COL].std().rename("sigma_daily").reset_index()
+
+    plan = inventory.merge(demand, on=_KEYS, how="left").merge(sigma, on=_KEYS, how="left")
+    if plan["mean_daily_demand"].isna().any():
+        raise ValueError("some (store, item) series have no forecast")
+    if plan["sigma_daily"].isna().all():
+        raise ValueError("no usable forecast errors to estimate sigma")
+    plan["sigma_daily"] = plan["sigma_daily"].fillna(plan["sigma_daily"].median())
+
+    rows = []
+    for r in plan.to_dict("records"):
+        ss = safety_stock(r["sigma_daily"], r[LEAD_TIME_COL], service_level)
+        rop = reorder_point(r["mean_daily_demand"], r[LEAD_TIME_COL], ss)
+        q = eoq(
+            r["mean_daily_demand"] * DAYS_PER_YEAR,
+            r[ORDER_COST_COL],
+            r[UNIT_COST_COL],
+            r[HOLDING_RATE_COL],
+        )
+        stock = r[STOCK_ON_HAND_COL]
+        rows.append(
+            {
+                STORE_COL: r[STORE_COL],
+                ITEM_COL: r[ITEM_COL],
+                STOCK_ON_HAND_COL: stock,
+                SAFETY_STOCK_COL: ss,
+                REORDER_POINT_COL: rop,
+                EOQ_COL: q,
+                FLAG_COL: stock_flag(stock, rop, q),
+                ORDER_QTY_COL: recommended_order_qty(stock, rop, q),
+            }
+        )
+    return pd.DataFrame(rows).sort_values(_KEYS).reset_index(drop=True)
