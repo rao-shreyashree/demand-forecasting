@@ -9,9 +9,11 @@ import pandas as pd
 
 from src.schema import DATE_COL as DATE, STORE_COL as STORE
 from src.schema import ITEM_COL as ITEM, SALES_COL as SALES
+from src.schema import validate_schema
 
-Y_HAT = "y_hat"   # not defined in schema.py yet
-MODEL = "model"   # not defined in schema.py yet
+# TODO: swap for imports once schema.py defines Y_HAT_COL and MODEL_COL
+Y_HAT = "y_hat"
+MODEL = "model"
 
 
 def _check(history, horizon):
@@ -20,6 +22,8 @@ def _check(history, horizon):
         raise ValueError("history must be 1-D")
     if h.size == 0:
         raise ValueError("history must not be empty")
+    if np.isnan(h).any():
+        raise ValueError("history contains NaN; clean the data first")
     if not isinstance(horizon, (int, np.integer)) or horizon < 1:
         raise ValueError("horizon must be a positive integer")
     return h
@@ -56,12 +60,14 @@ def moving_average_forecast(history, horizon=28, window=7):
 def forecast_by_group(train_df, method="naive", horizon=28, **kwargs):
     """Run a baseline for every (store, item) and return the contract format.
 
-    train_df : columns date, store, item, sales (TRAIN data only)
+    train_df : columns date, store, item, sales (TRAIN data only); checked
+               with schema.validate_schema
     method   : "naive" | "seasonal_naive" | "moving_average"
     kwargs   : season=... or window=...
 
-    Returns a DataFrame with columns date, store, item, y_hat, model.
-    Forecast dates start the day after each series' last date.
+    Returns a DataFrame with columns date, store, item, y_hat, model
+    (one model per call). Forecast dates start the day after each series'
+    last date.
     """
     methods = {
         "naive": (naive_forecast, lambda kw: "naive"),
@@ -79,9 +85,7 @@ def forecast_by_group(train_df, method="naive", horizon=28, **kwargs):
     func, namer = methods[method]
     model_name = namer(kwargs)
 
-    for c in (DATE, STORE, ITEM, SALES):
-        if c not in train_df.columns:
-            raise ValueError(f"train_df is missing column '{c}'")
+    validate_schema(train_df)
 
     parts = []
     for (store, item), g in train_df.groupby([STORE, ITEM]):

@@ -77,7 +77,7 @@ def _frames():
 def test_forecast_errors_actual_minus_forecast():
     actual, forecast = _frames()
     out = forecast_errors(actual, forecast)
-    assert list(out.columns) == ["date", "store", "item", "error"]
+    assert list(out.columns) == ["date", "store", "item", "model", "error"]
     assert out["error"].tolist() == [-2, 2]
 
 
@@ -92,3 +92,45 @@ def test_forecast_errors_no_overlap_raises():
     forecast["date"] = forecast["date"] + pd.Timedelta(days=30)
     with pytest.raises(ValueError):
         forecast_errors(actual, forecast)
+
+
+def test_bias_is_negative_of_mean_error():
+    actual, forecast = _frames()
+    err = forecast_errors(actual, forecast)["error"].mean()
+    assert bias(actual["sales"], forecast["y_hat"]) == pytest.approx(-err)
+
+
+def test_forecast_errors_keeps_model_column_for_multiple_models():
+    actual, forecast = _frames()
+    other = forecast.copy()
+    other["model"] = "ma_7"
+    other["y_hat"] = [10, 25]
+    out = forecast_errors(actual, pd.concat([forecast, other], ignore_index=True))
+    assert len(out) == 4                      # 2 dates x 2 models, no mixing
+    assert out[out["model"] == "m"]["error"].tolist() == [-2, 2]
+    assert out[out["model"] == "ma_7"]["error"].tolist() == [0, -5]
+
+
+def test_forecast_errors_duplicate_keys_without_model_raises():
+    actual, forecast = _frames()
+    dup = pd.concat([forecast, forecast], ignore_index=True).drop(columns="model")
+    with pytest.raises(ValueError):
+        forecast_errors(actual, dup)
+
+
+def test_forecast_errors_duplicate_actual_raises():
+    actual, forecast = _frames()
+    with pytest.raises(ValueError):
+        forecast_errors(pd.concat([actual, actual]), forecast)
+
+
+def test_forecast_errors_partial_window_raises_when_strict():
+    actual, forecast = _frames()
+    with pytest.raises(ValueError):
+        forecast_errors(actual.iloc[:1], forecast)
+
+
+def test_forecast_errors_partial_window_allowed_when_not_strict():
+    actual, forecast = _frames()
+    out = forecast_errors(actual.iloc[:1], forecast, strict=False)
+    assert len(out) == 1

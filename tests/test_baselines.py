@@ -104,3 +104,15 @@ def test_forecast_by_group_unknown_method_raises():
 def test_forecast_by_group_missing_column_raises():
     with pytest.raises(ValueError):
         forecast_by_group(_train_df().drop(columns="sales"), method="naive")
+
+
+def test_nan_history_raises():
+    with pytest.raises(ValueError):
+        naive_forecast([1.0, float("nan"), 3.0], horizon=2)
+
+
+def test_forecast_by_group_bad_date_type_raises():
+    df = _train_df()
+    df["date"] = df["date"].astype(str)
+    with pytest.raises(TypeError):
+        forecast_by_group(df, method="naive")
