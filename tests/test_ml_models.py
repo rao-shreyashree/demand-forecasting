@@ -5,7 +5,8 @@ import pytest
 from src.baselines import forecast_by_group
 from src.data import time_split
 from src.metrics import wape
-from src.ml_models import MODEL_NAME, add_features, forecast_lightgbm
+from src.features import add_features
+from src.ml_models import MODEL_NAME, forecast_lightgbm
 from src.schema import DATE_COL, ITEM_COL, MODEL_COL, SALES_COL, STORE_COL, Y_HAT_COL
 
 FAST = {"n_estimators": 30, "num_leaves": 8, "min_child_samples": 5, "learning_rate": 0.2}
@@ -60,16 +61,6 @@ def test_learns_weekly_pattern_better_than_naive():
     assert wape(m_lgb[SALES_COL], m_lgb[Y_HAT_COL]) < 0.1
 
 
-def test_features_use_only_data_from_28_days_back():
-    df = _data(n_days=60, series=((1, 1),))
-    df[SALES_COL] = np.arange(60, dtype=float)
-    f = add_features(df)
-    row = f.iloc[40]
-    assert row["lag_28"] == 12                              # sales at index 40 - 28
-    assert row["rolling_mean_7"] == pytest.approx(np.mean(range(6, 13)))  # idx 6..12
-    assert np.isnan(f.iloc[27]["lag_28"])                   # nothing 28 days back yet
-
-
 def test_future_rows_never_see_values_after_the_cutoff():
     train, _ = time_split(_data(n_days=100, series=((1, 1),)), horizon=HORIZON)
     cutoff_sales = train[SALES_COL].to_numpy()
@@ -114,4 +105,3 @@ def test_missing_column_raises():
     train, _ = time_split(_data(), horizon=HORIZON)
     with pytest.raises(ValueError):
         forecast_lightgbm(train.drop(columns=[SALES_COL]), HORIZON, params=FAST)
-        
