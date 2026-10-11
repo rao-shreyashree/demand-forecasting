@@ -3,15 +3,16 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import sys
-sys.path.insert(0, '.')
+sys.path.insert(0, ".")
 
 from src.schema import DATE_COL, STORE_COL, ITEM_COL, SALES_COL
 from src.metrics import wape, rmse, mape, bias
+from src.backtest import rolling_origin_windows, evaluate_forecast, run_backtest
+from src.data import time_split
 
 
 @pytest.fixture
 def sample_df():
-    """40 days of data, 2 stores x 2 items = 4 series."""
     base = datetime(2017, 1, 1)
     rows = []
     for store in [1, 2]:
@@ -21,68 +22,67 @@ def sample_df():
                     DATE_COL:  base + timedelta(days=d),
                     STORE_COL: store,
                     ITEM_COL:  item,
-                    SALES_COL: 10 + d % 7  # simple pattern
+                    SALES_COL: 10 + d % 7
                 })
     df = pd.DataFrame(rows)
     df[DATE_COL] = pd.to_datetime(df[DATE_COL])
     return df.sort_values([STORE_COL, ITEM_COL, DATE_COL]).reset_index(drop=True)
 
 
-def make_windows(df, horizon=28, n_windows=3):
-    """Duplicate of rolling_origin_windows for test isolation."""
-    all_dates = sorted(df[DATE_COL].unique())
-    total_days = len(all_dates)
-    windows = []
-    for i in range(n_windows):
-        val_end_idx   = total_days - 1 - (i * horizon)
-        val_start_idx = val_end_idx - horizon + 1
-        if val_start_idx < 0:
-            break
-        val_start = all_dates[val_start_idx]
-        val_end   = all_dates[val_end_idx]
-        train_df  = df[df[DATE_COL] < val_start].copy()
-        val_df    = df[(df[DATE_COL] >= val_start) & (df[DATE_COL] <= val_end)].copy()
-        windows.append({'window': i+1, 'train': train_df, 'val': val_df})
-    windows.reverse()
-    return windows
-
-
 def test_windows_no_leakage(sample_df):
-    windows = make_windows(sample_df, horizon=7, n_windows=2)
+    windows = rolling_origin_windows(sample_df, horizon=7, n_windows=2)
     for w in windows:
-        assert w['train'][DATE_COL].max() < w['val'][DATE_COL].min()
+        assert w["train"][DATE_COL].max() < w["val"][DATE_COL].min()
 
 
 def test_windows_val_size(sample_df):
-    windows = make_windows(sample_df, horizon=7, n_windows=2)
+    windows = rolling_origin_windows(sample_df, horizon=7, n_windows=2)
     for w in windows:
-        unique_val_days = w['val'][DATE_COL].nunique()
-        assert unique_val_days == 7
+        assert w["val"][DATE_COL].nunique() == 7
 
 
-def test_evaluate_forecast_perfect():
-    """Perfect forecast should give wape=0, rmse=0."""
-    actual = pd.DataFrame({
-        DATE_COL:  pd.date_range('2017-01-01', periods=5),
-        STORE_COL: 1, ITEM_COL: 1, SALES_COL: [10, 12, 11, 13, 10]
-    })
-    forecast = actual.copy()
-    forecast['y_hat'] = forecast[SALES_COL]
-    forecast['model'] = 'perfect'
-
-    assert wape(actual[SALES_COL], forecast['y_hat']) == 0.0
-    assert rmse(actual[SALES_COL], forecast['y_hat']) == 0.0
+def test_last_window_matches_time_split(sample_df):
+    horizon = 7
+    windows = rolling_origin_windows(sample_df, horizon=horizon, n_windows=2)
+    last_window_val = windows[-1]["val"]
+    _, ts_val = time_split(sample_df, horizon=horizon)
+    assert last_window_val[DATE_COL].min() == ts_val[DATE_COL].min()
+    assert last_window_val[DATE_COL].max() == ts_val[DATE_COL].max()
 
 
-def test_evaluate_forecast_ranking():
-    """Better forecast should rank higher (lower WAPE)."""
-    y_true = np.array([10.0] * 10)
-    good   = np.array([10.5] * 10)  # small error
-    bad    = np.array([15.0] * 10)  # large error
+def test_evaluate_forecast_perfect(sample_df):
+    windows = rolling_origin_windows(sample_df, horizon=7, n_windows=1)
+    val_df = windows[0]["val"]
+    perfect_fc = val_df[[DATE_COL, STORE_COL, ITEM_COL, SALES_COL]].copy()
+    perfect_fc["y_hat"] = perfect_fc[SALES_COL].astype(float)
+    perfect_fc["model"] = "perfect"
+    result = evaluate_forecast(perfect_fc, val_df, window_num=1)
+    assert result.loc[result["model"] == "perfect", "wape"].values[0] == 0.0
+    assert result.loc[result["model"] == "perfect", "rmse"].values[0] == 0.0
 
-    assert wape(y_true, good) < wape(y_true, bad)
+
+def test_evaluate_forecast_hand_computed(sample_df):
+    windows = rolling_origin_windows(sample_df, horizon=7, n_windows=1)
+    val_df = windows[0]["val"]
+    fc = val_df[[DATE_COL, STORE_COL, ITEM_COL, SALES_COL]].copy()
+    fc["y_hat"] = fc[SALES_COL] + 1.0
+    fc["model"] = "overforecast"
+    result = evaluate_forecast(fc, val_df, window_num=1)
+    computed_wape = result.loc[result["model"] == "overforecast", "wape"].values[0]
+    n = len(val_df)
+    expected_wape = n / val_df[SALES_COL].abs().sum()
+    assert abs(computed_wape - expected_wape) < 1e-6
 
 
 def test_wape_zero_actuals():
-    """WAPE should return NaN when all actuals are zero."""
     assert np.isnan(wape([0, 0, 0], [1, 2, 3]))
+
+
+def test_evaluate_forecast_n_rows(sample_df):
+    windows = rolling_origin_windows(sample_df, horizon=7, n_windows=1)
+    val_df = windows[0]["val"]
+    fc = val_df[[DATE_COL, STORE_COL, ITEM_COL, SALES_COL]].copy()
+    fc["y_hat"] = fc[SALES_COL].astype(float)
+    fc["model"] = "test"
+    result = evaluate_forecast(fc, val_df, window_num=1)
+    assert result.loc[result["model"] == "test", "n_rows"].values[0] == len(val_df)
