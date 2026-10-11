@@ -27,6 +27,11 @@ EOQ_COL = "eoq"
 FLAG_COL = "flag"
 ORDER_QTY_COL = "order_qty"
 
+# Model selection
+WAPE_COL = "wape"
+CHOSEN_MODEL_COL = "chosen_model"
+SELECTED_MODEL = "selected"  # label on the stitched per-series forecast
+
 
 def validate_schema(df: pd.DataFrame) -> None:
     """Validates dataframe schema and data types."""
