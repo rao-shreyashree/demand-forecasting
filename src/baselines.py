@@ -7,13 +7,15 @@ time_split).
 import numpy as np
 import pandas as pd
 
-from src.schema import DATE_COL as DATE, STORE_COL as STORE
-from src.schema import ITEM_COL as ITEM, SALES_COL as SALES
-from src.schema import validate_schema
-
-# TODO: swap for imports once schema.py defines Y_HAT_COL and MODEL_COL
-Y_HAT = "y_hat"
-MODEL = "model"
+from src.schema import (
+    DATE_COL as DATE,
+    ITEM_COL as ITEM,
+    MODEL_COL as MODEL,
+    SALES_COL as SALES,
+    STORE_COL as STORE,
+    Y_HAT_COL as Y_HAT,
+    validate_schema,
+)
 
 
 def _check(history, horizon):
