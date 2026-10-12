@@ -30,6 +30,8 @@ from src.schema import (
 
 CLASSICAL_MODELS = {"sarima", "prophet"}
 
+ML_MODELS = {"lightgbm", "xgboost"}
+
 _KEYS = [STORE_COL, ITEM_COL]
 _ROW_KEYS = [DATE_COL, STORE_COL, ITEM_COL]
 _FORECAST_COLS = [DATE_COL, STORE_COL, ITEM_COL, Y_HAT_COL, MODEL_COL]
@@ -120,8 +122,7 @@ def build_selected_plan(
 def plan_summary(plan: pd.DataFrame) -> pd.DataFrame:
     """Flag counts split by whether the winner was a classical model or a baseline."""
     source = plan[CHOSEN_MODEL_COL].map(
-        lambda m: "classical" if m in CLASSICAL_MODELS else "baseline"
-    ).rename("source")
+        lambda m: "classical" if m in CLASSICAL_MODELS else "ml" if m in ML_MODELS else "baseline").rename("source")
     return pd.crosstab(source, plan[FLAG_COL], margins=True)
 
 
