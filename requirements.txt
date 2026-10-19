@@ -5,3 +5,5 @@ scikit-learn
 prophet
 statsmodels
 lightgbm==4.6.0
+streamlit>=1.40
+altair>=5
