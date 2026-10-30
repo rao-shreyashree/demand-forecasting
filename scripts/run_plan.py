@@ -1,3 +1,5 @@
+"""Usage: from repo root: python -m scripts.run_plan"""
+
 def main():
 
     from src.data import load_data, clean_data, time_split
