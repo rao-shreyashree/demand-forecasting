@@ -119,16 +119,20 @@ def window_bounds(df: pd.DataFrame, horizon: int = HORIZON, n_windows: int = 3) 
 def run_backtest_windows(data_path: str, top_n: int, n_windows: int, out_path: str) -> pd.DataFrame:
     """Refit SARIMA + Prophet at every rolling origin (train strictly before val_start).
 
-    Uses the SAME top-N series as the single-window run (picked from time_split's train),
-    so the subset is fixed across windows. Output keeps the 5-column schema; windows are
-    identified by their dates.
+    The top-N series are picked once from data before the earliest window (no validation
+    data is used for selection) and held fixed across windows. Output keeps the 5-column
+    schema; windows are identified by their dates.
     """
     df = pd.read_csv(data_path, parse_dates=[DATE_COL])
-    train_latest, _ = time_split(df, horizon=HORIZON)
-    series = select_top_series(train_latest, top_n)
+    bounds = window_bounds(df, HORIZON, n_windows)
+
+    # Leakage-safe, fixed cohort: rank series using only data before the EARLIEST
+    # window's val_start, so no window's validation period influences which series
+    # are evaluated, and the same series are used in every window.
+    series = select_top_series(df[df[DATE_COL] < bounds[0][0]], top_n)
 
     parts = []
-    for val_start, val_end in window_bounds(df, HORIZON, n_windows):
+    for val_start, val_end in bounds:
         train = df[df[DATE_COL] < val_start]
         val = df[(df[DATE_COL] >= val_start) & (df[DATE_COL] <= val_end)]
         print(f"Window {val_start.date()} -> {val_end.date()}: {len(series)} series x 2 models")
