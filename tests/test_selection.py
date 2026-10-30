@@ -136,3 +136,12 @@ def test_summary_and_top_risks():
     summ = plan_summary(plan)
     assert summ.loc["All", "All"] == len(plan)
     assert len(top_risks(plan, n=1)) <= 1
+
+def test_summary_counts_ml_winner_as_ml():
+    a = _actual()
+    fc = combine_forecasts(_fc(a, "naive", 3), _fc(a, "lightgbm", 0, series=[(1, 1)]))
+    plan = build_selected_plan(a, fc, simulate_inventory(a))
+    summ = plan_summary(plan)
+    assert summ.loc["ml", "All"] == 1
+    assert summ.loc["baseline", "All"] == 1
+    assert "classical" not in summ.index
