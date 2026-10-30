@@ -4,3 +4,4 @@ numpy
 scikit-learn
 prophet
 statsmodels
+lightgbm==4.6.0

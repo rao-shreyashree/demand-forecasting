@@ -12,13 +12,15 @@ Sign conventions (do not mix them up):
 import numpy as np
 import pandas as pd
 
-from src.schema import DATE_COL as DATE, STORE_COL as STORE
-from src.schema import ITEM_COL as ITEM, SALES_COL as SALES
-
-# TODO: swap for imports once schema.py defines Y_HAT_COL, MODEL_COL, ERROR_COL
-Y_HAT = "y_hat"
-MODEL = "model"
-ERROR = "error"
+from src.schema import (
+    DATE_COL as DATE,
+    ERROR_COL as ERROR,
+    ITEM_COL as ITEM,
+    MODEL_COL as MODEL,
+    SALES_COL as SALES,
+    STORE_COL as STORE,
+    Y_HAT_COL as Y_HAT,
+)
 
 
 def _prepare(y_true, y_pred):
