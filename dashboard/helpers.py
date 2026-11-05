@@ -28,7 +28,7 @@ from src.schema import (  # NOTE: if any of these live elsewhere (e.g. src.inven
 
 RAW_PATH = Path("data/raw/train.csv")
 PROCESSED = Path("data/processed")
-FORECASTS_PATH = PROCESSED / "forecasts_classical.csv"  # TODO: swap to combined / best-model forecasts later
+FORECAST_GLOB = "forecasts_*.csv"  # classical + ML + baselines are all picked up from data/processed/
 PLAN_PATH = PROCESSED / "inventory_plan.csv"            # written by forecast-to-plan branch
 
 _KEYS = [STORE_COL, ITEM_COL]
@@ -47,8 +47,21 @@ def load_actuals(path=RAW_PATH) -> pd.DataFrame:
     return clean_data(load_data(str(path)))
 
 
-def load_forecasts(path=FORECASTS_PATH) -> pd.DataFrame:
-    return _read(path, parse_dates=[DATE_COL])
+def load_forecasts(folder=PROCESSED, pattern=FORECAST_GLOB) -> pd.DataFrame:
+    """Concat every forecasts_*.csv (contract: date, store, item, y_hat, model); drops duplicate rows."""
+    files = sorted(Path(folder).glob(pattern))
+    if not files:
+        raise FileNotFoundError(f"No forecast files matching {Path(folder) / pattern}")
+    need = [DATE_COL, *_KEYS, Y_HAT_COL, MODEL_COL]
+    frames = []
+    for f in files:
+        df = pd.read_csv(f, parse_dates=[DATE_COL])
+        missing = [c for c in need if c not in df.columns]
+        if missing:
+            raise ValueError(f"{f.name} is missing columns: {missing}")
+        frames.append(df[need])
+    out = pd.concat(frames, ignore_index=True)
+    return out.drop_duplicates([DATE_COL, *_KEYS, MODEL_COL]).reset_index(drop=True)
 
 
 def load_plan(path=PLAN_PATH) -> pd.DataFrame:
@@ -118,7 +131,7 @@ def forecast_metrics(forecasts, actuals, store=None, item=None, models=None, by=
     """
     by = list(by or [])
     keys = [MODEL_COL, *by]
-    out_cols = [*keys, "wape", "bias", "rmse", "actual_total", "forecast_total", "n"]
+    out_cols = [*keys, "wape", "bias", "rmse", "actual_total", "forecast_total", "n", "n_series"]
     m = _overlap(forecasts, actuals, store, item, models)
     if m.empty:
         return pd.DataFrame(columns=out_cols)
@@ -133,8 +146,30 @@ def forecast_metrics(forecasts, actuals, store=None, item=None, models=None, by=
             "actual_total": float(g[SALES_COL].sum()),
             "forecast_total": float(g[Y_HAT_COL].sum()),
             "n": len(g),
+            "n_series": len(g[_KEYS].drop_duplicates()),
         })
     return pd.DataFrame(rows)[out_cols].sort_values([*by, "wape"]).reset_index(drop=True)
+
+
+def restrict_to_common_series(forecasts: pd.DataFrame) -> pd.DataFrame:
+    """Keep only (store, item) series that every model has forecasts for (fair model comparison)."""
+    n_models = forecasts[MODEL_COL].nunique()
+    cover = forecasts.groupby(_KEYS)[MODEL_COL].nunique().rename("k").reset_index()
+    common = cover.loc[cover["k"] == n_models, _KEYS]
+    return forecasts.merge(common, on=_KEYS)
+
+
+def plan_model(plan_row, forecasts, actuals, store, item):
+    """(model, source) the plan is based on for one series.
+
+    Uses the plan's own model column if it has one; otherwise falls back to the lowest-WAPE model on the window.
+    """
+    if plan_row is not None and MODEL_COL in plan_row.index:
+        return str(plan_row[MODEL_COL]), "from plan"
+    m = forecast_metrics(forecasts, actuals, store, item)
+    if m.empty:
+        return None, None
+    return str(m.iloc[0][MODEL_COL]), "lowest WAPE on window"
 
 
 def error_series(forecasts, actuals, store, item, models=None) -> pd.DataFrame:

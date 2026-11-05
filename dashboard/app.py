@@ -3,6 +3,7 @@
 Run from repo root:  streamlit run dashboard/app.py
 """
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # repo root
@@ -17,12 +18,17 @@ from src.schema import (
     REORDER_POINT_COL, SAFETY_STOCK_COL, STOCK_ON_HAND_COL, STORE_COL,
 )
 
+_T0 = time.perf_counter()
 st.set_page_config(page_title="Demand Forecasting & Inventory Planning", page_icon="📦", layout="wide")
 st.markdown("<style>.block-container{padding-top:2.2rem;}</style>", unsafe_allow_html=True)
 
 ACTUAL_COLOR = "#0ea5e9"
 PALETTE = ["#f97316", "#a855f7", "#22c55e", "#eab308", "#ec4899", "#14b8a6"]
 GRID = "#64748b"
+SIM_NOTE = (
+    "Stock on hand, lead times and costs are **simulated** (fixed random seed), not real inventory data. "
+    "Forecasts are real model outputs."
+)
 
 
 # ---------- helpers ----------
@@ -48,6 +54,14 @@ def load_all():
     actuals = h.trim_actuals(h.load_actuals(), forecasts, days=120)
     plan = h.load_plan()
     return forecasts, actuals, plan
+
+
+@st.cache_data(show_spinner="Computing model metrics…")
+def global_metrics(common_only: bool):
+    fc, ac, _ = load_all()
+    if common_only:
+        fc = h.restrict_to_common_series(fc)
+    return h.forecast_metrics(fc, ac), h.forecast_metrics(fc, ac, by=[STORE_COL])
 
 
 def forecast_chart(df, cmap):
@@ -117,9 +131,11 @@ with st.sidebar:
     st.header("Filters")
     store = st.selectbox("Store", sorted(series_df[STORE_COL].unique()))
     item = st.selectbox("Item", sorted(series_df.loc[series_df[STORE_COL] == store, ITEM_COL].unique()))
-    models = st.multiselect("Models", all_models, default=all_models)
+    avail = sorted(forecasts.loc[(forecasts[STORE_COL] == store) & (forecasts[ITEM_COL] == item), MODEL_COL].unique())
+    models = st.multiselect("Models", avail, default=avail)
     history_days = st.slider("History shown before forecast (days)", 7, 90, 28, step=7)
     st.caption("Filters apply to the *Forecast vs actual* tab. Other tabs cover all series.")
+    show_time = st.checkbox("Show render time")
 
 tab_fc, tab_models, tab_flags, tab_reorder = st.tabs(
     ["📈 Forecast vs actual", "🏁 Model comparison", "🚦 Stock flags", "🛒 Reorder table"]
@@ -167,40 +183,52 @@ with tab_fc:
             if row is None:
                 st.caption("This series isn't in the inventory plan.")
             else:
+                pm, src = h.plan_model(row, forecasts, actuals, store, item)
+                if pm:
+                    st.caption(f"Plan based on: **{pm}** ({src})")
                 a, b = st.columns(2)
                 a.metric("Flag", str(row[FLAG_COL]))
                 b.metric("Recommended order", f"{row[ORDER_QTY_COL]:,.0f}")
-                a.metric("On hand", f"{row[STOCK_ON_HAND_COL]:,.0f}")
+                a.metric("On hand (simulated)", f"{row[STOCK_ON_HAND_COL]:,.0f}")
                 b.metric("Reorder point", f"{row[REORDER_POINT_COL]:,.0f}")
                 a.metric("Safety stock", f"{row[SAFETY_STOCK_COL]:,.0f}")
                 b.metric("EOQ", f"{row[EOQ_COL]:,.0f}")
+                st.caption("Stock, lead time and costs are simulated.")
 
         with st.expander("Data"):
             d = chart_df.round(1).reset_index()
             d[DATE_COL] = d[DATE_COL].dt.strftime("%Y-%m-%d")
-            show_df(d)
+            shown = d.copy()
+            for c in chart_df.columns:  # blank cells (history rows have no forecast) -> "–"
+                shown[c] = d[c].map(lambda v: "–" if pd.isna(v) else f"{v:,.1f}")
+            show_df(shown)
             st.download_button("Download CSV", d.to_csv(index=False), f"forecast_vs_actual_s{store}_i{item}.csv", "text/csv")
 
 # ---------- tab 2: model comparison ----------
 with tab_models:
     st.subheader("Model comparison — all series, forecast window")
     st.caption("Quick look on the shared forecast window. The official comparison is the rolling-origin backtest.")
-    overall = h.forecast_metrics(forecasts, actuals)
+    common_only = st.toggle(
+        "Compare only on series covered by every model",
+        value=True,
+        help="Models cover different numbers of series (e.g. classical = top-N, ML = all). Comparing on shared series keeps it fair.",
+    )
+    overall, by_store = global_metrics(common_only)
     if overall.empty:
-        st.info("No overlap between forecasts and actuals.")
+        st.info("No overlap between forecasts and actuals (or no series covered by every model).")
     else:
         disp = overall.assign(wape=overall["wape"] * 100)
         show_df(
-            disp[[MODEL_COL, "wape", "bias", "rmse", "n"]],
+            disp[[MODEL_COL, "wape", "bias", "rmse", "n_series", "n"]],
             column_config={
                 MODEL_COL: "Model",
                 "wape": st.column_config.NumberColumn("WAPE (%)", format="%.2f"),
                 "bias": st.column_config.NumberColumn("Bias (units/day)", format="%+.2f"),
                 "rmse": st.column_config.NumberColumn("RMSE", format="%.2f"),
+                "n_series": st.column_config.NumberColumn("Series", format="%d"),
                 "n": st.column_config.NumberColumn("Rows", format="%d"),
             },
         )
-        by_store = h.forecast_metrics(forecasts, actuals, by=[STORE_COL])
         base = alt.Chart(by_store).encode(
             x=alt.X(f"{MODEL_COL}:N", title=None, axis=alt.Axis(labelAngle=0)),
             y=alt.Y(f"{STORE_COL}:O", title="Store"),
@@ -217,6 +245,7 @@ with tab_models:
 # ---------- tab 3: stock flags ----------
 with tab_flags:
     st.subheader("Stock flags")
+    st.info(SIM_NOTE)
     k = h.plan_kpis(plan)
     c1, c2, c3 = st.columns(3)
     with c1.container(border=True):
@@ -248,16 +277,16 @@ with tab_flags:
         st.altair_chart(bars)
 
     with st.container(border=True):
-        st.markdown("**On hand vs reorder point**")
+        st.markdown("**On hand (simulated) vs reorder point**")
         lim = float(max(plan[STOCK_ON_HAND_COL].max(), plan[REORDER_POINT_COL].max()))
         pts = alt.Chart(plan).mark_circle(size=55, opacity=0.75).encode(
             x=alt.X(f"{REORDER_POINT_COL}:Q", title="Reorder point"),
-            y=alt.Y(f"{STOCK_ON_HAND_COL}:Q", title="On hand"),
+            y=alt.Y(f"{STOCK_ON_HAND_COL}:Q", title="On hand (simulated)"),
             color=alt.Color(f"{FLAG_COL}:N", scale=flag_scale, legend=alt.Legend(orient="bottom", title=None)),
             tooltip=[STORE_COL, ITEM_COL, FLAG_COL, STOCK_ON_HAND_COL, REORDER_POINT_COL, ORDER_QTY_COL],
         )
         diag = alt.Chart(pd.DataFrame({"x": [0, lim], "y": [0, lim]})).mark_line(color=GRID, strokeDash=[4, 4]).encode(
-            x=alt.X("x:Q", title="Reorder point"), y=alt.Y("y:Q", title="On hand")
+            x=alt.X("x:Q", title="Reorder point"), y=alt.Y("y:Q", title="On hand (simulated)")
         )
         st.altair_chart((diag + pts).properties(height=340, width="container"))
         st.caption("Points below the dashed line are under their reorder point.")
@@ -268,6 +297,7 @@ with tab_flags:
 # ---------- tab 4: reorder table ----------
 with tab_reorder:
     st.subheader("Reorder table")
+    st.info(SIM_NOTE)
     f1, f2 = st.columns(2)
     flag_opts = sorted(plan[FLAG_COL].unique())
     chosen_flags = f1.multiselect("Flags", flag_opts, default=flag_opts)
@@ -289,7 +319,7 @@ with tab_reorder:
         column_config={
             STORE_COL: "Store",
             ITEM_COL: "Item",
-            STOCK_ON_HAND_COL: st.column_config.NumberColumn("On hand", format="%d"),
+            STOCK_ON_HAND_COL: st.column_config.NumberColumn("On hand (sim.)", format="%d"),
             REORDER_POINT_COL: st.column_config.NumberColumn("Reorder pt", format="%d"),
             "stock_vs_rop_pct": st.column_config.ProgressColumn("Stock / ROP", min_value=0, max_value=100, format="%d%%"),
             SAFETY_STOCK_COL: st.column_config.NumberColumn("Safety stock", format="%d"),
@@ -300,3 +330,6 @@ with tab_reorder:
         },
     )
     st.download_button("Download CSV", table.to_csv(index=False), "reorder_table.csv", "text/csv")
+
+if show_time:
+    st.sidebar.caption(f"Rendered in {time.perf_counter() - _T0:.2f}s")

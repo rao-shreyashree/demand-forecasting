@@ -20,3 +20,8 @@ so readers know how many windows each model was evaluated on.
 ## Leakage rule
 Lag features must be >= 28 days. Rolling features must be shifted by 28
 before the window. See notebooks/eda_features_shryes.ipynb.
+
+## Dashboard
+Run from repo root:  streamlit run dashboard/app.py
+
+Note: on the dashboard - stock, lead time and costs are simulated

@@ -126,3 +126,41 @@ def test_reorder_table_store_filter_and_pct(plan):
     t = h.reorder_table(plan, stores=[2])
     assert list(zip(t[STORE_COL], t[ITEM_COL])) == [(2, 2)]
     assert t.loc[0, "stock_vs_rop_pct"] == pytest.approx(10 / 30 * 100)
+
+
+def test_load_forecasts_concats_and_dedupes(tmp_path, forecasts):
+    forecasts.to_csv(tmp_path / "forecasts_classical.csv", index=False)
+    ml = forecasts[forecasts[MODEL_COL] == "sarima"].assign(**{MODEL_COL: "lightgbm"})
+    pd.concat([ml, ml.head(3)]).to_csv(tmp_path / "forecasts_ml.csv", index=False)
+    out = h.load_forecasts(tmp_path)
+    assert set(out[MODEL_COL]) == {"sarima", "prophet", "lightgbm"}
+    assert len(out) == 28 * 3
+
+
+def test_load_forecasts_errors(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        h.load_forecasts(tmp_path)
+    pd.DataFrame({DATE_COL: ["2017-12-04"], STORE_COL: [1]}).to_csv(tmp_path / "forecasts_x.csv", index=False)
+    with pytest.raises(ValueError):
+        h.load_forecasts(tmp_path)
+
+
+def test_restrict_to_common_series(forecasts):
+    other = forecasts[forecasts[MODEL_COL] == "sarima"].assign(**{MODEL_COL: "lightgbm", ITEM_COL: 2})
+    both = pd.concat([forecasts, other], ignore_index=True)  # item 1: sarima+prophet, item 2: lightgbm only
+    assert h.restrict_to_common_series(both).empty
+    assert len(h.restrict_to_common_series(forecasts)) == len(forecasts)
+
+
+def test_metrics_n_series(forecasts, actuals):
+    assert set(h.forecast_metrics(forecasts, actuals)["n_series"]) == {1}
+
+
+def test_plan_model(plan, forecasts, actuals):
+    row = h.series_plan(plan, 1, 1)
+    model, src = h.plan_model(row, forecasts, actuals, 1, 1)
+    assert model in {"sarima", "prophet"} and src == "lowest WAPE on window"
+    row2 = row.copy()
+    row2[MODEL_COL] = "lightgbm"
+    assert h.plan_model(row2, forecasts, actuals, 1, 1) == ("lightgbm", "from plan")
+    assert h.plan_model(None, forecasts, actuals, 9, 9) == (None, None)
