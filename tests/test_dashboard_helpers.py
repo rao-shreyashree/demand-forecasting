@@ -4,7 +4,7 @@ import pytest
 
 from dashboard import helpers as h
 from src.schema import (
-    DATE_COL, EOQ_COL, FLAG_COL, ITEM_COL, MODEL_COL, ORDER_QTY_COL,
+    DATE_COL, EOQ_COL, FLAG_COL, ITEM_COL, MODEL_COL, CHOSEN_MODEL_COL, ORDER_QTY_COL,
     REORDER_POINT_COL, SAFETY_STOCK_COL, SALES_COL, STOCK_ON_HAND_COL,
     STORE_COL, Y_HAT_COL,
 )
@@ -161,6 +161,15 @@ def test_plan_model(plan, forecasts, actuals):
     model, src = h.plan_model(row, forecasts, actuals, 1, 1)
     assert model in {"sarima", "prophet"} and src == "lowest WAPE on window"
     row2 = row.copy()
-    row2[MODEL_COL] = "lightgbm"
+    row2[CHOSEN_MODEL_COL] = "lightgbm"
     assert h.plan_model(row2, forecasts, actuals, 1, 1) == ("lightgbm", "from plan")
     assert h.plan_model(None, forecasts, actuals, 9, 9) == (None, None)
+
+def test_reorder_table_item_filter(plan):
+    t = h.reorder_table(plan, items=[2])
+    assert list(zip(t[STORE_COL], t[ITEM_COL])) == [(2, 2)]
+
+def test_load_forecasts_ignores_backtest_files(tmp_path, forecasts):
+    forecasts.to_csv(tmp_path / "forecasts_classical.csv", index=False)
+    forecasts.assign(**{MODEL_COL: "x"}).to_csv(tmp_path / "forecasts_backtest_w1.csv", index=False)
+    assert set(h.load_forecasts(tmp_path)[MODEL_COL]) == {"sarima", "prophet"}

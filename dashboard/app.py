@@ -298,12 +298,14 @@ with tab_flags:
 with tab_reorder:
     st.subheader("Reorder table")
     st.info(SIM_NOTE)
-    f1, f2 = st.columns(2)
-    flag_opts = sorted(plan[FLAG_COL].unique())
+    f1, f2, f3 = st.columns(3)
+    flag_opts = sorted(plan.loc[plan[ORDER_QTY_COL] > 0, FLAG_COL].unique())
     chosen_flags = f1.multiselect("Flags", flag_opts, default=flag_opts)
     store_opts = sorted(plan[STORE_COL].unique())
     chosen_stores = f2.multiselect("Stores", store_opts, default=store_opts)
-    table = h.reorder_table(plan, flags=chosen_flags, stores=chosen_stores)
+    item_opts = sorted(plan[ITEM_COL].unique())
+    chosen_items = f3.multiselect("Items (empty = all)", item_opts)
+    table = h.reorder_table(plan, flags=chosen_flags, stores=chosen_stores, items=chosen_items or None)
 
     m1, m2, m3 = st.columns(3)
     with m1.container(border=True):

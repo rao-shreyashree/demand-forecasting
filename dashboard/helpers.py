@@ -17,6 +17,7 @@ from src.schema import (  # NOTE: if any of these live elsewhere (e.g. src.inven
     FLAG_COL,
     ITEM_COL,
     MODEL_COL,
+    CHOSEN_MODEL_COL,
     ORDER_QTY_COL,
     REORDER_POINT_COL,
     SAFETY_STOCK_COL,
@@ -49,7 +50,7 @@ def load_actuals(path=RAW_PATH) -> pd.DataFrame:
 
 def load_forecasts(folder=PROCESSED, pattern=FORECAST_GLOB) -> pd.DataFrame:
     """Concat every forecasts_*.csv (contract: date, store, item, y_hat, model); drops duplicate rows."""
-    files = sorted(Path(folder).glob(pattern))
+    files = [f for f in sorted(Path(folder).glob(pattern)) if "backtest" not in f.stem]
     if not files:
         raise FileNotFoundError(f"No forecast files matching {Path(folder) / pattern}")
     need = [DATE_COL, *_KEYS, Y_HAT_COL, MODEL_COL]
@@ -162,10 +163,10 @@ def restrict_to_common_series(forecasts: pd.DataFrame) -> pd.DataFrame:
 def plan_model(plan_row, forecasts, actuals, store, item):
     """(model, source) the plan is based on for one series.
 
-    Uses the plan's own model column if it has one; otherwise falls back to the lowest-WAPE model on the window.
+    Uses the plan's own chosen_model column if it has one; otherwise falls back to the lowest-WAPE model on the window.
     """
-    if plan_row is not None and MODEL_COL in plan_row.index:
-        return str(plan_row[MODEL_COL]), "from plan"
+    if plan_row is not None and CHOSEN_MODEL_COL in plan_row.index:
+        return str(plan_row[CHOSEN_MODEL_COL]), "from plan"
     m = forecast_metrics(forecasts, actuals, store, item)
     if m.empty:
         return None, None
@@ -206,13 +207,15 @@ def flag_by_store(plan: pd.DataFrame) -> pd.DataFrame:
     return plan.groupby([STORE_COL, FLAG_COL]).size().reset_index(name="series")
 
 
-def reorder_table(plan: pd.DataFrame, flags=None, stores=None) -> pd.DataFrame:
+def reorder_table(plan: pd.DataFrame, flags=None, stores=None, items=None) -> pd.DataFrame:
     """Series with a recommended order (> 0), most urgent (largest shortfall vs reorder point) first."""
     df = plan.copy()
     if flags is not None:
         df = df[df[FLAG_COL].isin(flags)]
     if stores is not None:
         df = df[df[STORE_COL].isin(stores)]
+    if items is not None:
+        df = df[df[ITEM_COL].isin(items)]
     df = df[df[ORDER_QTY_COL] > 0].copy()
     df["shortfall"] = df[REORDER_POINT_COL] - df[STOCK_ON_HAND_COL]
     df["stock_vs_rop_pct"] = (df[STOCK_ON_HAND_COL] / df[REORDER_POINT_COL].where(df[REORDER_POINT_COL] != 0) * 100)
