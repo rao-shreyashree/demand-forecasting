@@ -13,6 +13,11 @@ The forecasting, evaluation, inventory and Streamlit dashboard modules are on
 `main`. [PR #72](https://github.com/rao-shreyashree/demand-forecasting/pull/72)
 has been merged; use the main-branch checkout for the entire workflow below.
 
+## Project links
+
+- Demo videos: _link to be added_
+- GitHub Project board: _link to be added_
+
 ## Prerequisites and installation
 
 Use Git and Python **3.10** (the version configured in CI), with pip and venv.
@@ -44,15 +49,14 @@ python -m pytest
 ```
 
 The requirements include pandas, NumPy, scikit-learn, Prophet, statsmodels,
-LightGBM, pytest, Streamlit and Altair. Only LightGBM is exactly pinned on the inspected main
-branch; a fully locked, repeatable environment is tracked separately in
+LightGBM, pytest, Streamlit and Altair. Only LightGBM is exactly pinned; a fully locked, repeatable environment is tracked separately in
 [#54](https://github.com/rao-shreyashree/demand-forecasting/issues/54) and
 [#61](https://github.com/rao-shreyashree/demand-forecasting/issues/61).
 Notebook tools are optional; see [setup and assumptions](docs/setup-and-assumptions.md).
 
 ## Data
 
-The inspected repository already tracks `data/raw/train.csv` and sample
+The repository already tracks `data/raw/train.csv` and sample
 processed outputs. If the raw file is missing, download **train.csv** from
 [Kaggle](https://www.kaggle.com/competitions/demand-forecasting-kernels-only/data)
 (account/competition access may be required) and place it at
@@ -206,5 +210,3 @@ The dashboard files `dashboard/app.py`, `dashboard/helpers.py`,
   across environments require separate measurement; they are not guaranteed here.
 - Formal SRS/SAD/STP deviation reconciliation remains
   [#69](https://github.com/rao-shreyashree/demand-forecasting/issues/69).
-
-
