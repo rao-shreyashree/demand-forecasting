@@ -11,7 +11,7 @@ FAST = {"n_estimators": 20, "num_leaves": 8, "min_child_samples": 5, "learning_r
 def _raw(n_days=150):
     dates = pd.date_range("2017-01-01", periods=n_days)
     rows = [
-        (d, s, i, 10 + 3 * s + i + (15 if d.dayofweek >= 5 else 0))
+        (d, s, i, 10 + 3 * s + i + (15 if d.day_of_week >= 5 else 0))
         for s in (1, 2) for i in (1, 2) for d in dates
     ]
     return pd.DataFrame(rows, columns=[DATE_COL, STORE_COL, ITEM_COL, SALES_COL])
