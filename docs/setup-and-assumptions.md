@@ -1,10 +1,9 @@
 # Setup and implementation assumptions
 
 This guide supports [issue #57](https://github.com/rao-shreyashree/demand-forecasting/issues/57).
-It describes main at `c1639abcdc2a945b9d5d01ae88f1f6b21b5dae10`, inspected on
-8 November 2026. Dashboard PR #72 has been merged into main. Use the main-branch
-checkout for installation, pipeline commands and the dashboard; start with the
-[README](../README.md).
+It describes the current `main` branch. Dashboard PR #72 has been merged into
+main. Use the main-branch checkout for installation, pipeline commands and the
+dashboard; start with the [README](../README.md).
 
 ## Environment
 
@@ -90,6 +89,13 @@ Windows PowerShell:
 
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path
+python -m jupyterlab
+```
+
+Windows Command Prompt:
+
+```bat
+set PYTHONPATH=%CD%
 python -m jupyterlab
 ```
 
@@ -184,9 +190,8 @@ Relevant repository requirements are
 [#42](https://github.com/rao-shreyashree/demand-forecasting/issues/42) (backtest),
 and [#48](https://github.com/rao-shreyashree/demand-forecasting/issues/48) (selection).
 
-No SRS, SAD or STP files were present in the inspected main tree or attached to
-the referenced chat. This guide records implementation-backed assumptions; it
-does not claim a line-by-line comparison with those unavailable documents.
-Formal deviations belong to #69 and final documentation/traceability to #70.
-
-
+SRS/SAD/STP are submitted separately; deviations are tracked in
+[#69](https://github.com/rao-shreyashree/demand-forecasting/issues/69). This
+guide records implementation-backed assumptions. Final documentation and
+traceability belong to
+[#70](https://github.com/rao-shreyashree/demand-forecasting/issues/70).
