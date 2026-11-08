@@ -1,10 +1,10 @@
 # Setup and implementation assumptions
 
 This guide supports [issue #57](https://github.com/rao-shreyashree/demand-forecasting/issues/57).
-It describes main at `2f8311403de181b3c47a766dfd83179353b4b126` and dashboard
-PR #72 at `ceb53433d785066e6b74e10caf8c8fc358606a51`, inspected on 7 November
-2026. #72 was open, not merged. Start with the [README](../README.md) for
-installation and pipeline commands.
+It describes main at `c1639abcdc2a945b9d5d01ae88f1f6b21b5dae10`, inspected on
+8 November 2026. Dashboard PR #72 has been merged into main. Use the main-branch
+checkout for installation, pipeline commands and the dashboard; start with the
+[README](../README.md).
 
 ## Environment
 
@@ -14,9 +14,10 @@ the selected interpreter. Python's module form (`python -m scripts.run_plan`,
 for example) must be run from the repository root so `src` imports and relative
 data paths resolve.
 
-Main's requirements do not include Streamlit or Altair. The dashboard branch
-adds `streamlit>=1.40` and `altair>=5`. Installing dashboard packages on main
-does not provide the dashboard source; use the PR checkout described in README.
+Main includes the dashboard source and its dependencies, `streamlit>=1.40`
+and `altair>=5`, in requirements.txt. Install that file from an updated main
+checkout, then run `python -m streamlit run dashboard/app.py` from the repository
+root. No separate dashboard-branch clone is needed.
 
 Most dependencies are unpinned. Seeded code does not establish identical output
 across package versions or operating systems. Dependency pinning/scanning and
@@ -167,7 +168,7 @@ regenerating CSVs because data and metrics are cached.
 | `No module named src` | Use the documented module command from repo root; for notebooks set PYTHONPATH as above. |
 | Missing raw data | Restore/download train.csv at data/raw/train.csv. |
 | Missing classical forecast for plan | Run the single-window classical command first; keep the exact default output path. |
-| Missing dashboard app or Streamlit | Main lacks the unmerged dashboard; use the #72 branch and its requirements. |
+| Missing dashboard app or Streamlit | Update the main checkout with `git pull --ff-only origin main` and reinstall its requirements in the active environment. |
 | Stale dashboard values | Stop/restart Streamlit after replacing input CSVs. |
 | ML rejects gaps or endpoints | Check complete daily series, unique keys and matching final dates. |
 | Different model scores | Compare date windows, store/item cohort and row counts before ranking models. |
@@ -187,4 +188,5 @@ No SRS, SAD or STP files were present in the inspected main tree or attached to
 the referenced chat. This guide records implementation-backed assumptions; it
 does not claim a line-by-line comparison with those unavailable documents.
 Formal deviations belong to #69 and final documentation/traceability to #70.
+
 
