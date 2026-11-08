@@ -9,11 +9,9 @@ for demonstration; recommendations are not based on a live inventory system.
 
 ## Current availability
 
-The forecasting, evaluation and inventory modules are on `main`.
-The Streamlit dashboard is in [PR #72](https://github.com/rao-shreyashree/demand-forecasting/pull/72),
-which was open and unmerged when this documentation was prepared on 7 November
-2026. Dashboard instructions below explicitly use that PR's branch until it
-is merged.
+The forecasting, evaluation, inventory and Streamlit dashboard modules are on
+`main`. [PR #72](https://github.com/rao-shreyashree/demand-forecasting/pull/72)
+has been merged; use the main-branch checkout for the entire workflow below.
 
 ## Prerequisites and installation
 
@@ -46,7 +44,7 @@ python -m pytest
 ```
 
 The requirements include pandas, NumPy, scikit-learn, Prophet, statsmodels,
-LightGBM and pytest. Only LightGBM is exactly pinned on the inspected main
+LightGBM, pytest, Streamlit and Altair. Only LightGBM is exactly pinned on the inspected main
 branch; a fully locked, repeatable environment is tracked separately in
 [#54](https://github.com/rao-shreyashree/demand-forecasting/issues/54) and
 [#61](https://github.com/rao-shreyashree/demand-forecasting/issues/61).
@@ -132,15 +130,17 @@ inventory calculations; it is not an independent test of future plan performance
 
 ### 4. Run the dashboard
 
-While #72 is unmerged, use a separate checkout of its branch:
+Use the main-branch checkout created during installation. If you already have
+an older main checkout, update it first (commit or stash any local edits before
+switching branches):
 
 ```sh
-git clone --branch feature/dashboard_shreya --single-branch https://github.com/rao-shreyashree/demand-forecasting.git demand-forecasting-dashboard
-cd demand-forecasting-dashboard
-python -m venv .venv
+git switch main
+git pull --ff-only origin main
 ```
 
-Activate this checkout's environment as above, then:
+Activate its virtual environment as above, then install the current requirements
+and start the dashboard from the repository root:
 
 ```sh
 python -m pip install --upgrade pip
@@ -150,8 +150,6 @@ python -m streamlit run dashboard/app.py
 
 Open the local URL printed by Streamlit (normally
 [localhost:8501](http://localhost:8501)); stop it with Ctrl+C.
-After #72 is merged, the same install/run commands can be used from an updated
-main checkout containing `dashboard/app.py`.
 
 The dashboard reads the raw sales, `data/processed/inventory_plan.csv`, and
 `data/processed/forecasts_*.csv` excluding names containing `backtest`.
@@ -189,8 +187,8 @@ docs/setup-and-assumptions.md     Setup details, assumptions and troubleshooting
 requirements.txt                 Python dependencies
 ```
 
-PR #72 additionally provides `dashboard/app.py`, `dashboard/helpers.py`,
-`.streamlit/config.toml` and `tests/test_dashboard_helpers.py`.
+The dashboard files `dashboard/app.py`, `dashboard/helpers.py`,
+`.streamlit/config.toml` and `tests/test_dashboard_helpers.py` are included on main.
 
 ## Assumptions and limitations
 
@@ -208,4 +206,5 @@ PR #72 additionally provides `dashboard/app.py`, `dashboard/helpers.py`,
   across environments require separate measurement; they are not guaranteed here.
 - Formal SRS/SAD/STP deviation reconciliation remains
   [#69](https://github.com/rao-shreyashree/demand-forecasting/issues/69).
+
 
