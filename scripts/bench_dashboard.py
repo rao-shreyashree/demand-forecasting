@@ -162,7 +162,7 @@ def main() -> int:
     results: dict[str, tuple[float, float, float]] = {}
 
     print("Benchmarking initial load (cold, cache cleared)...")
-    results["Initial dashboard load (cold)"] = (bench_initial_cold(), 0, 0)
+    results["Initial dashboard load (cold)"] = _measure(bench_initial_cold)
 
     print("Benchmarking initial load (warm)...")
     results["Initial dashboard load (warm)"] = _measure(bench_initial_warm)
