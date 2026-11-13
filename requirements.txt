@@ -1,9 +1,9 @@
-pytest 
-pandas 
-numpy 
-scikit-learn
-prophet
-statsmodels
+pytest==9.2.0
+pandas==2.3.3
+numpy==2.2.6
+scikit-learn==1.7.2
+prophet==1.5.0
+statsmodels==0.15.0
 lightgbm==4.6.0
-streamlit>=1.40
-altair>=5
+streamlit==1.65.0
+altair==6.2.2
