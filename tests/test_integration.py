@@ -125,7 +125,7 @@ def test_simulated_inventory_has_no_gaps(pipeline):
 
 def _plan(pipeline):
     """ADAPT when there is a change: build_selected_plan's real arguments (see selection.py line 99)."""
-    inv = inventory.simulate_inventory(pipeline["df"])
+    inv = inventory.simulate_inventory(pipeline["train"])
     return selection.build_selected_plan(pipeline["val"], pipeline["fc"], inv)
 
 
