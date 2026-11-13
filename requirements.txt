@@ -6,4 +6,4 @@ prophet
 statsmodels
 lightgbm==4.6.0
 streamlit>=1.40
-altair>=5
+altair>=6.3.0
