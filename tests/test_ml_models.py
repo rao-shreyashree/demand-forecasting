@@ -20,7 +20,7 @@ def _data(n_days=200, series=((1, 1), (1, 2), (2, 1)), weekly=True):
     for k, (s, i) in enumerate(series):
         for d in dates:
             base = 10 + 5 * k
-            rows.append((d, s, i, base + (20 if weekly and d.dayofweek >= 5 else 0)))
+            rows.append((d, s, i, base + (20 if weekly and d.day_of_week >= 5 else 0)))
     return pd.DataFrame(rows, columns=[DATE_COL, STORE_COL, ITEM_COL, SALES_COL])
 
 

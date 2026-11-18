@@ -56,8 +56,8 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     out["year"] = d.dt.year
     out["month"] = d.dt.month
     out["day"] = d.dt.day
-    out["dayofweek"] = d.dt.dayofweek
-    out["dayofyear"] = d.dt.dayofyear
+    out["dayofweek"] = d.dt.day_of_week
+    out["dayofyear"] = d.dt.day_of_year
     out["weekofyear"] = d.dt.isocalendar().week.astype(int)
     out["quarter"] = d.dt.quarter
     out["is_weekend"] = (out["dayofweek"] >= 5).astype(int)
