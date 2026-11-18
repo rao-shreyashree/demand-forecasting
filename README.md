@@ -208,5 +208,17 @@ The dashboard files `dashboard/app.py`, `dashboard/helpers.py`,
   identical date coverage. Keep input forecast windows aligned.
 - Runtime ≤15 minutes, dashboard response ≤3 seconds and identical outputs
   across environments require separate measurement; they are not guaranteed here.
-- Formal SRS/SAD/STP deviation reconciliation remains
-  [#69](https://github.com/rao-shreyashree/demand-forecasting/issues/69).
+
+
+## Deviations from SRS / SAD / STP
+
+The planned scope below is based on the project backlog and Phase 0 scope. IDs refer to backlog items.
+
+| # | Area (backlog ID) | Planned | Built | Reason and impact |
+|---|---|---|---|---|
+| 1 | Gradient-boosting models (DF-F-010) | LightGBM and XGBoost on all 500 series | LightGBM forecasts cover all 500 series. XGBoost was omitted. | On the 28-day holdout, LightGBM achieved a WAPE of 0.122, compared with 0.243 for `ma_7`, the best baseline in that evaluation. |
+| 2 | Holiday and promotion effects (Phase 0 scope) | Analyze holiday and promotion effects and include them in the forecast features. | The model uses calendar features such as day of week and month. It has no explicit holiday or promotion flags. | The dataset has no promotion data. The calendar features capture recurring patterns, but the model cannot distinguish an explicit holiday effect from other calendar effects. |
+| 3 | Backtest comparison (DF-F-012) | Compare forecasting models using rolling-origin evaluation and report WAPE, MAPE, and RMSE. | The backtest notebook evaluates three 28-day windows. The exported comparison ranks Prophet, SARIMA, seasonal naive (7-day), moving average (7-day and 28-day), and naive. LightGBM was evaluated separately on a 28-day holdout. | The exported comparison does not rank LightGBM. Its holdout score uses a different evaluation setup. |
+| 4 | Forecast-to-plan model selection (DF-F-017) | Select the best candidate model per item by WAPE. | `scripts/run_plan.py` builds the candidate pool from naive, seasonal naive, moving average, and classical forecasts. | LightGBM is outside the candidate pool, so the inventory planner cannot select it. |
+| 5 | Reproducibility (DF-NF-003) | Produce identical outputs across repeated runs. | Automated checks cover baselines, LightGBM, model selection, simulated inventory, and the inventory plan. | Automated reproducibility checks do not cover SARIMA or Prophet. |
+| 6 | Data in the repository (project rule) | Keep raw data out of Git. | `data/raw/train.csv` is tracked. | The `.gitignore` pattern `data/*.csv` only matches CSV files directly under `data/`, so it does not cover `data/raw/train.csv`. |
