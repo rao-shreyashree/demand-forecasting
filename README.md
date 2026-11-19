@@ -15,8 +15,10 @@ has been merged; use the main-branch checkout for the entire workflow below.
 
 ## Project links
 
-- Demo videos: _link to be added_
-- GitHub Project board: _link to be added_
+- Demo videos: 
+  - [Video 1](demo/SE_demo_vid_shryes.mp4)
+  - [Video 2](demo/SE_demo_vid_shriya.mp4)
+- GitHub Project board: [Demand Forecasting Board](https://github.com/users/rao-shreyashree/projects/1)
 
 ## Prerequisites and installation
 
