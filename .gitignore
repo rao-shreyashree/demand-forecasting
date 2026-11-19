@@ -4,3 +4,7 @@ __pycache__/
 .env  
 venv/  
 data/*.csv 
+.coverage 
+htmlcov_code/ 
+htmlcov_branch/ 
+coverage_branch.json 
