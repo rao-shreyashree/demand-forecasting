@@ -1,0 +1,42 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.1, pytest-9.2.0, pluggy-1.7.0
+rootdir: C:\Users\raosh\Documents\PESU\SEMESTER 5\Software Engineering\SE Lab\Mini Project\demand-forecasting
+plugins: anyio-4.16.0, cov-7.1.0
+collected 170 items
+
+tests\test_backtest.py .......                                           [  4%]
+tests\test_baselines.py ....................                             [ 15%]
+tests\test_classical_models.py ...                                       [ 17%]
+tests\test_dashboard_helpers.py .....................                    [ 30%]
+tests\test_data.py ..                                                    [ 31%]
+tests\test_features.py ......                                            [ 34%]
+tests\test_integration.py ..........                                     [ 40%]
+tests\test_inventory.py ..........................................       [ 65%]
+tests\test_metrics.py ...........................                        [ 81%]
+tests\test_ml_models.py .............                                    [ 88%]
+tests\test_reproducibility.py .....                                      [ 91%]
+tests\test_run_ml.py .                                                   [ 92%]
+tests\test_sample.py .                                                   [ 92%]
+tests\test_selection.py ............                                     [100%]
+
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.13.1-final-0 _______________
+
+Name                      Stmts   Miss  Cover   Missing
+-------------------------------------------------------
+src\__init__.py               0      0   100%
+src\backtest.py              37     11    70%   20, 72-100
+src\baselines.py             49      4    92%   24, 44, 56, 109
+src\classical_models.py      98     66    33%   30-36, 40-49, 53-64, 68-75, 80-97, 126-152, 156-177, 181-192
+src\data.py                  20      0   100%
+src\features.py              30      0   100%
+src\inventory.py            100      1    99%   200
+src\metrics.py               51      1    98%   31
+src\ml_models.py             54      2    96%   54, 56
+src\sample.py                 2      0   100%
+src\schema.py                32      2    94%   49, 51
+src\selection.py             60      6    90%   42-45, 51, 70
+-------------------------------------------------------
+TOTAL                       533     93    83%
+Coverage HTML written to dir htmlcov_code
+============================= 170 passed in 7.29s =============================
